@@ -36,13 +36,13 @@ akkord-baukasten/
    oder: oben rechts auf die drei Punkte tippen → **„App installieren"**
    (bei älteren Chrome-Versionen: „Zum Startbildschirm hinzufügen").
 3. Bestätigen. Die App landet danach mit eigenem Icon auf dem Homescreen.
-4. Beim Öffnen über dieses Icon startet sie **im Vollbildmodus** – ganz ohne
-   Adressleiste oder Status-Leiste, wie eine echte App.
+4. Beim Öffnen über dieses Icon startet sie **im App-Fenster ohne Browser-Chrome**
+   (Statusleiste mit Uhr/Akku bleibt sichtbar, Adressleiste ist weg) — das ist der
+   `"standalone"`-Modus, mit dem dieses Paket ausgeliefert wird.
 
-Falls dir der reine Vollbildmodus zu radikal ist (kein Akku-/Uhr-Anzeige mehr sichtbar):
-in `manifest.json` das Feld `"display": "fullscreen"` auf `"display": "standalone"`
-ändern und neu hochladen — dann bleibt die Android-Statusleiste sichtbar, der Rest
-bleibt wie ein App-Fenster ohne Browser-Chrome.
+Falls du stattdessen den radikaleren, echten Vollbildmodus willst (auch die
+Android-Statusleiste verschwindet): in `manifest.json` `"display": "standalone"`
+auf `"display": "fullscreen"` ändern und neu hochladen.
 
 ## 3. Updates veröffentlichen
 
