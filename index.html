@@ -844,9 +844,23 @@
         <button class="toggle-btn active" id="btnMajor">Dur</button>
         <button class="toggle-btn" id="btnMinor">Moll</button>
       </div>
-      <div class="switch-line">
-        <div class="switch" id="switch7th"><div class="knob"></div></div>
-        Septakkorde
+      <div class="inv-select">
+        Akkordtyp
+        <select id="chordColorSelect">
+          <option value="triad">Dreikl&auml;nge</option>
+          <option value="sus2">Sus2</option>
+          <option value="sus4">Sus4</option>
+          <option value="six">6 (Sixth)</option>
+          <option value="seventh">7 (Maj7/Min7/Dom7)</option>
+          <option value="add9">Add9</option>
+          <option value="six9">6/9</option>
+          <option value="11">11</option>
+          <option value="13">13</option>
+        </select>
+      </div>
+      <div class="switch-line" id="dimSeventhRow" title="Nur relevant f&uuml;r die verminderte Stufe (vii&deg;/ii&deg;) in den Modi 7, 11, 13">
+        <div class="switch" id="switchDim7"><div class="knob"></div></div>
+        <span>Verm.: dim7 statt m7b5</span>
       </div>
       <div class="inv-select">
         Umkehrung
@@ -854,7 +868,7 @@
           <option value="0">Grundstellung</option>
           <option value="1">1. Umkehrung</option>
           <option value="2">2. Umkehrung</option>
-          <option value="3">3. Umkehrung (nur 7er)</option>
+          <option value="3">3. Umkehrung (ab 7er)</option>
         </select>
       </div>
     </div>
@@ -952,15 +966,65 @@
 
   const CHORD_TONES = {
     maj:[0,4,7], min:[0,3,7], dim:[0,3,6],
-    maj7:[0,4,7,11], min7:[0,3,7,10], dom7:[0,4,7,10], m7b5:[0,3,6,10]
+    sus2:[0,2,7], sus4:[0,5,7],
+    '6':[0,4,7,9], m6:[0,3,7,9],
+    maj7:[0,4,7,11], min7:[0,3,7,10], dom7:[0,4,7,10], m7b5:[0,3,6,10], dim7:[0,3,6,9],
+    add9:[0,4,7,14], madd9:[0,3,7,14],
+    '6add9':[0,4,7,9,14], m6add9:[0,3,7,9,14],
+    maj11:[0,4,7,11,14,17], min11:[0,3,7,10,14,17], dom11:[0,4,7,10,14,17],
+    maj13:[0,4,7,11,14,17,21], min13:[0,3,7,10,14,17,21], dom13:[0,4,7,10,14,17,21]
   };
-  const SUFFIX = {maj:'', min:'m', dim:'dim', maj7:'maj7', min7:'m7', dom7:'7', m7b5:'m7b5'};
+  const SUFFIX = {
+    maj:'', min:'m', dim:'dim',
+    sus2:'sus2', sus4:'sus4',
+    '6':'6', m6:'m6',
+    maj7:'maj7', min7:'m7', dom7:'7', m7b5:'m7b5', dim7:'dim7',
+    add9:'add9', madd9:'madd9',
+    '6add9':'6/9', m6add9:'m6/9',
+    maj11:'maj11', min11:'m11', dom11:'11',
+    maj13:'maj13', min13:'m13', dom13:'13'
+  };
+
+  // Chord-type ("Akkordtyp") modes, in the order they're offered in the UI.
+  // Maps each diatonic degree's plain triad quality (maj/min/dim) — or, for the
+  // 7/11/13 families, its proper diatonic seventh quality — to the CHORD_TONES key
+  // actually used. The diminished degree is deliberately left unextended for
+  // sus/six/add9/six9/11/13 (no standard "dim add9" or "dim11" chord exists).
+  function resolveChordQuality(baseQuality, seventhQuality, color, dimSeventhChoice){
+    switch(color){
+      case 'sus2': return 'sus2';
+      case 'sus4': return 'sus4';
+      case 'six':  return baseQuality==='dim' ? 'dim' : (baseQuality==='maj' ? '6' : 'm6');
+      case 'add9': return baseQuality==='dim' ? 'dim' : (baseQuality==='maj' ? 'add9' : 'madd9');
+      case 'six9': return baseQuality==='dim' ? 'dim' : (baseQuality==='maj' ? '6add9' : 'm6add9');
+      case 'seventh': {
+        let q = seventhQuality;
+        if(q === 'm7b5' && dimSeventhChoice === 'dim7') q = 'dim7';
+        return q;
+      }
+      case '11':
+      case '13': {
+        let q = seventhQuality;
+        if(q === 'm7b5' && dimSeventhChoice === 'dim7') q = 'dim7';
+        const extMap = {
+          maj7: color === '11' ? 'maj11' : 'maj13',
+          min7: color === '11' ? 'min11' : 'min13',
+          dom7: color === '11' ? 'dom11' : 'dom13'
+        };
+        return extMap[q] || q; // m7b5 / dim7 stay as-is: no defined 11/13 extension
+      }
+      case 'triad':
+      default:
+        return baseQuality;
+    }
+  }
 
   // ---------- State ----------
   const state = {
     rootNote: 0,
     scaleType: 'major',
-    use7th: false,
+    chordColor: 'triad',
+    dimSeventh: 'm7b5', // 'm7b5' or 'dim7' — only matters for the diminished degree in 7/11/13 modes
     inversion: 0,
     progression: [], // {root, quality, label, inversion, keyRoot, keyScale}
     tempo: 100,
@@ -988,7 +1052,8 @@
       localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
         rootNote: state.rootNote,
         scaleType: state.scaleType,
-        use7th: state.use7th,
+        chordColor: state.chordColor,
+        dimSeventh: state.dimSeventh,
         progression: state.progression,
         tempo: state.tempo,
         beatsPerChord: state.beatsPerChord
@@ -1003,7 +1068,9 @@
       const p = JSON.parse(raw);
       state.rootNote = p.rootNote || 0;
       state.scaleType = p.scaleType || 'major';
-      state.use7th = !!p.use7th;
+      // chordColor replaces the old boolean use7th switch; migrate old autosaves.
+      state.chordColor = p.chordColor || (p.use7th ? 'seventh' : 'triad');
+      state.dimSeventh = p.dimSeventh || 'm7b5';
       state.progression = Array.isArray(p.progression) ? p.progression.map(c=>({
         root:c.root, quality:c.quality, label:c.label,
         inversion:c.inversion || 0, octave:c.octave || 0,
@@ -1039,10 +1106,20 @@
     octaveBase = octaveBase === undefined ? 4 : octaveBase;
     const rootMidi = root + 12*(octaveBase+1);
     const baseIntervals = CHORD_TONES[quality];
-    // Raise the lowest `inversion` chord tones (root, third, ...) up an octave.
-    const voiced = baseIntervals.map((v,i)=> v + (i < inversion ? 12 : 0));
+    const bassValue = baseIntervals[inversion]; // interval of the tone that becomes the bass
+    // Raise each of the lower chord tones by however many full octaves it takes
+    // to land above the chosen bass tone. A single +12 is enough for triads and
+    // 7th chords (max interval < 12), but 9/11/13 chords span almost two octaves,
+    // so a plain "+12 if before the inversion index" would sometimes leave an
+    // earlier tone below the intended bass — this generalizes correctly to both.
+    const voiced = baseIntervals.map((v,i)=>{
+      if(i === inversion) return v;
+      let shifted = v;
+      while(shifted <= bassValue) shifted += 12;
+      return shifted;
+    });
     const notes = voiced.map(iv => rootMidi + iv);
-    const bassMidi = rootMidi + baseIntervals[inversion]; // lowest tone in this inversion (undoubled)
+    const bassMidi = rootMidi + bassValue; // lowest tone in this inversion (undoubled)
     const bass = bassMidi - 12; // doubled an octave lower for fullness
     return {rootMidi, notes, bass, bassMidi, inversion};
   }
@@ -1123,7 +1200,7 @@
     const out = [];
     for(let i=0;i<7;i++){
       const noteIndex = (state.rootNote + scale.intervals[i]) % 12;
-      const quality = state.use7th ? scale.sevenths[i] : scale.qualities[i];
+      const quality = resolveChordQuality(scale.qualities[i], scale.sevenths[i], state.chordColor, state.dimSeventh);
       out.push({root:noteIndex, quality, label:scale.labels[i]});
     }
     return out;
@@ -1131,10 +1208,16 @@
 
   function getSecondaryDominants(diatonic){
     const targets = [1,2,3,4,5];
+    // Secondary dominants are inherently dominant-function chords, so only the
+    // dominant-family extensions (11/13) carry over; other color modes (sus,
+    // six, add9...) would not make harmonic sense here and are left as plain V7.
+    let quality = 'dom7', qLabel = 'V7';
+    if(state.chordColor === '11'){ quality = 'dom11'; qLabel = 'V11'; }
+    else if(state.chordColor === '13'){ quality = 'dom13'; qLabel = 'V13'; }
     return targets.map(i=>{
       const t = diatonic[i];
       const domRoot = (t.root + 7) % 12;
-      return {root:domRoot, quality:'dom7', label:'V7/' + t.label};
+      return {root:domRoot, quality, label:qLabel + '/' + t.label};
     });
   }
 
@@ -1473,7 +1556,8 @@
       loadBtn.addEventListener('click', ()=>{
         state.rootNote = p.rootNote;
         state.scaleType = p.scaleType;
-        state.use7th = p.use7th;
+        state.chordColor = p.chordColor || (p.use7th ? 'seventh' : 'triad');
+        state.dimSeventh = p.dimSeventh || 'm7b5';
         state.progression = JSON.parse(JSON.stringify(p.chords)).map(c=>({
           root:c.root, quality:c.quality, label:c.label,
           inversion: c.inversion || 0,
@@ -1521,7 +1605,10 @@
     renderPiano();
     document.getElementById('btnMajor').classList.toggle('active', state.scaleType==='major');
     document.getElementById('btnMinor').classList.toggle('active', state.scaleType==='minor');
-    document.getElementById('switch7th').classList.toggle('on', state.use7th);
+    document.getElementById('chordColorSelect').value = state.chordColor;
+    document.getElementById('switchDim7').classList.toggle('on', state.dimSeventh === 'dim7');
+    document.getElementById('dimSeventhRow').style.display =
+      (state.chordColor === 'seventh' || state.chordColor === '11' || state.chordColor === '13') ? 'flex' : 'none';
     document.getElementById('inversionSelect').value = String(state.inversion);
     renderRelatedKeys();
     renderChordGrids();
@@ -1610,7 +1697,14 @@
   // ---------- Wire up controls ----------
   document.getElementById('btnMajor').addEventListener('click', ()=>{ state.scaleType='major'; refreshAll(); });
   document.getElementById('btnMinor').addEventListener('click', ()=>{ state.scaleType='minor'; refreshAll(); });
-  document.getElementById('switch7th').addEventListener('click', ()=>{ state.use7th = !state.use7th; refreshAll(); });
+  document.getElementById('chordColorSelect').addEventListener('change', (e)=>{
+    state.chordColor = e.target.value;
+    refreshAll();
+  });
+  document.getElementById('switchDim7').addEventListener('click', ()=>{
+    state.dimSeventh = state.dimSeventh === 'dim7' ? 'm7b5' : 'dim7';
+    refreshAll();
+  });
   document.getElementById('inversionSelect').addEventListener('change', (e)=>{
     state.inversion = parseInt(e.target.value,10);
     renderChordGrids();
@@ -1642,7 +1736,8 @@
     presets[name] = {
       rootNote: state.rootNote,
       scaleType: state.scaleType,
-      use7th: state.use7th,
+      chordColor: state.chordColor,
+      dimSeventh: state.dimSeventh,
       chords: JSON.parse(JSON.stringify(state.progression)),
       tempo: state.tempo,
       beatsPerChord: state.beatsPerChord
