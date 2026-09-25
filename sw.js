@@ -2,7 +2,7 @@
 // startet und Android/Chrome sie als "installierbar" erkennt.
 // Cache-Name bei Änderungen an den Assets hochzählen (v1 -> v2 ...),
 // damit Nutzer:innen automatisch die neue Version bekommen.
-const CACHE_NAME = 'akkord-baukasten-v2';
+const CACHE_NAME = 'akkord-baukasten-v3';
 const ASSETS = [
   './',
   './index.html',
